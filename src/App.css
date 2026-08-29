@@ -1,0 +1,40 @@
+.app {
+  width: 100%;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 5rem 1.5rem 3rem;
+  text-align: center;
+}
+
+.app-header {
+  max-width: 700px;
+  margin-bottom: 2.5rem;
+}
+
+.couple-name {
+  font-family: "Lavanderia", cursive;
+  font-size: clamp(2.5rem, 6vw, 3.6rem);
+  color: #aacbf1;
+  margin-bottom: 1rem;
+}
+
+.subtitle {
+  font-size: clamp(1.05rem, 2vw, 1.1rem);
+  line-height: 1.6;
+  color: #555;
+  margin: 0 auto;
+}
+
+.app-footer {
+  margin-top: 3rem;
+  color: #9c7a83;
+  font-size: 0.95rem;
+}
+
+@media (max-width: 600px) {
+  .app {
+    padding: 3.5rem 1.25rem 2.5rem;
+  }
+}

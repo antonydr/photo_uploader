@@ -1,0 +1,39 @@
+@import url("https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@400;700&display=swap");
+
+:root {
+  color-scheme: light;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html {
+  color-scheme: light;
+  background: #fdf6f0 !important;
+  -webkit-text-size-adjust: 100%;
+}
+
+body, html {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  font-family: "Libre Baskerville", serif;
+  background: #fdf6f0;
+  color: #5a3b42;
+  overflow-x: hidden;
+}
+
+/* Force light mode even if the phone/browser prefers dark */
+@media (prefers-color-scheme: dark) {
+  html, body, .app {
+    background: #fdf6f0 !important;
+    color: #5a3b42 !important;
+  }
+
+  input:not([type="radio"]),
+  textarea {
+    background: #fff !important;
+    color: #5a3b42 !important;
+  }
+}
