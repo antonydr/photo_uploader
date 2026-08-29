@@ -1,22 +1,25 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import "./Gallery.css";
 import { supabase } from "../lib/supabase";
 
 const BUCKET_NAME = "wedding-photos";
 const POOL_LIMIT = 30;
 const PAGE_SIZE = 24;
-const NUM_SLOTS = 6;
-const MIN_INTERVAL_MS = 2500;
-const MAX_INTERVAL_MS = 5500;
-const FADE_MS = 450;
+const MIN_BELT_LENGTH = 8; // minimum tiles per loop, so a small pool still feels full
+const SECONDS_PER_TILE = 3.5; // higher = slower scroll
 
 function isVideo(name, mimetype) {
   if (mimetype) return mimetype.startsWith("video/");
   return /\.(mp4|mov|webm|avi|m4v)$/i.test(name);
 }
 
-function randomInterval() {
-  return MIN_INTERVAL_MS + Math.random() * (MAX_INTERVAL_MS - MIN_INTERVAL_MS);
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
 }
 
 export default function Gallery() {
@@ -31,14 +34,7 @@ export default function Gallery() {
   const [offset, setOffset] = useState(0);
 
   const [lightboxIndex, setLightboxIndex] = useState(null);
-
-  // Which pool-index each visible slot currently shows, and whether it's mid-fade
-  const [slotItems, setSlotItems] = useState([]);
-  const [slotFading, setSlotFading] = useState([]);
-
-  const timeoutsRef = useRef([]);
-  const pausedRef = useRef(false);
-  const scheduleSlotRef = useRef(() => {});
+  const [hovered, setHovered] = useState(false);
 
   const toItem = useCallback((f) => {
     const { data } = supabase.storage.from(BUCKET_NAME).getPublicUrl(f.name);
@@ -49,7 +45,7 @@ export default function Gallery() {
     };
   }, []);
 
-  // Load the pool used for the shuffling wall
+  // Load and shuffle the pool used for the marquee
   useEffect(() => {
     let cancelled = false;
     async function loadPool() {
@@ -62,7 +58,7 @@ export default function Gallery() {
       if (listError) {
         setError("Couldn't load the gallery right now.");
       } else {
-        setPool((data || []).map(toItem));
+        setPool(shuffle((data || []).map(toItem)));
       }
       setLoadingPool(false);
     }
@@ -72,90 +68,24 @@ export default function Gallery() {
     };
   }, [toItem]);
 
-  // Set up the shuffling wall whenever the pool changes
-  useEffect(() => {
-    timeoutsRef.current.forEach((t) => t && clearTimeout(t));
-    timeoutsRef.current = [];
-
-    if (pool.length === 0) {
-      setSlotItems([]);
-      setSlotFading([]);
-      return undefined;
+  // One shuffled "loop" of tiles, padded out so a small pool still fills the belt
+  const beltSequence = useMemo(() => {
+    if (pool.length === 0) return [];
+    const seq = [];
+    while (seq.length < MIN_BELT_LENGTH) {
+      seq.push(...shuffle(pool));
     }
-
-    const slotCount = Math.min(NUM_SLOTS, pool.length);
-    const initial = Array.from({ length: slotCount }, (_, i) => i % pool.length);
-    setSlotItems(initial);
-    setSlotFading(new Array(slotCount).fill(false));
-    timeoutsRef.current = new Array(slotCount).fill(null);
-
-    // Nothing extra to shuffle in if the pool isn't bigger than what's visible
-    if (pool.length <= slotCount) {
-      scheduleSlotRef.current = () => {};
-      return undefined;
-    }
-
-    const scheduleSlot = (slotIdx) => {
-      if (pausedRef.current) return;
-      const outerTimeout = setTimeout(() => {
-        if (pausedRef.current) return;
-        setSlotFading((prev) => {
-          const next = [...prev];
-          next[slotIdx] = true;
-          return next;
-        });
-
-        setTimeout(() => {
-          if (pausedRef.current) return;
-          setSlotItems((prev) => {
-            const shown = new Set(prev);
-            let candidate = Math.floor(Math.random() * pool.length);
-            let attempts = 0;
-            while (shown.has(candidate) && attempts < 6) {
-              candidate = Math.floor(Math.random() * pool.length);
-              attempts += 1;
-            }
-            const next = [...prev];
-            next[slotIdx] = candidate;
-            return next;
-          });
-          setSlotFading((prev) => {
-            const next = [...prev];
-            next[slotIdx] = false;
-            return next;
-          });
-          scheduleSlot(slotIdx);
-        }, FADE_MS);
-      }, randomInterval());
-
-      timeoutsRef.current[slotIdx] = outerTimeout;
-    };
-
-    scheduleSlotRef.current = scheduleSlot;
-
-    for (let i = 0; i < slotCount; i += 1) {
-      scheduleSlot(i);
-    }
-
-    return () => {
-      timeoutsRef.current.forEach((t) => t && clearTimeout(t));
-      timeoutsRef.current = [];
-    };
+    return seq.map((item, i) => ({ ...item, poolIndex: pool.indexOf(item), key: `belt-${i}` }));
   }, [pool]);
 
-  // Pause the wall while a photo is open full-size, and resume where it left off on close
-  useEffect(() => {
-    pausedRef.current = lightboxIndex !== null;
-
-    if (pausedRef.current) {
-      timeoutsRef.current.forEach((t) => t && clearTimeout(t));
-      timeoutsRef.current = timeoutsRef.current.map(() => null);
-    } else {
-      timeoutsRef.current.forEach((t, i) => {
-        if (!t) scheduleSlotRef.current(i);
-      });
-    }
-  }, [lightboxIndex]);
+  // The track renders the loop twice back-to-back so the animation can loop seamlessly
+  const trackItems = useMemo(
+    () => [
+      ...beltSequence,
+      ...beltSequence.map((item, i) => ({ ...item, key: `belt-dup-${i}` })),
+    ],
+    [beltSequence]
+  );
 
   const loadMore = useCallback(async () => {
     setLoadingAll(true);
@@ -184,6 +114,7 @@ export default function Gallery() {
   };
 
   const activeList = showAll ? allFiles : pool;
+  const isPaused = hovered || lightboxIndex !== null || showAll;
 
   return (
     <section className="gallery-section">
@@ -197,18 +128,26 @@ export default function Gallery() {
 
       {pool.length > 0 && (
         <>
-          <div className="gallery-carousel">
-            {slotItems.map((poolIdx, slotIdx) => {
-              const item = pool[poolIdx];
-              if (!item) return null;
-              return (
+          <div
+            className="gallery-carousel-wrap"
+            onMouseEnter={() => setHovered(true)}
+            onMouseLeave={() => setHovered(false)}
+          >
+            <div
+              className="gallery-carousel-track"
+              style={{
+                animationDuration: `${beltSequence.length * SECONDS_PER_TILE}s`,
+                animationPlayState: isPaused ? "paused" : "running",
+              }}
+            >
+              {trackItems.map((item) => (
                 <button
-                  key={slotIdx}
+                  key={item.key}
                   type="button"
-                  className={`gallery-thumb carousel-slot${slotFading[slotIdx] ? " fading" : ""}`}
+                  className="carousel-tile"
                   onClick={() => {
                     setShowAll(false);
-                    setLightboxIndex(poolIdx);
+                    setLightboxIndex(item.poolIndex);
                   }}
                 >
                   {item.video ? (
@@ -218,8 +157,8 @@ export default function Gallery() {
                   )}
                   {item.video && <span className="play-icon">▶</span>}
                 </button>
-              );
-            })}
+              ))}
+            </div>
           </div>
 
           <button type="button" className="view-all-btn" onClick={openGallery}>

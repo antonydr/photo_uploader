@@ -16,23 +16,64 @@
   font-style: italic;
 }
 
-/* Shuffling photo wall — fixed frames, contents fade and swap on their own */
-.gallery-carousel {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
-  gap: 10px;
+/* Sliding photo marquee — continuous belt, fades at both edges via mask */
+.gallery-carousel-wrap {
+  overflow: hidden;
   margin-bottom: 1.2rem;
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent,
+    black 10%,
+    black 90%,
+    transparent
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    black 10%,
+    black 90%,
+    transparent
+  );
 }
 
-.carousel-slot img,
-.carousel-slot video {
-  transition: opacity 0.45s ease;
-  opacity: 1;
+.gallery-carousel-track {
+  display: flex;
+  gap: 10px;
+  width: max-content;
+  animation-name: gallery-marquee;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
 }
 
-.carousel-slot.fading img,
-.carousel-slot.fading video {
-  opacity: 0;
+@keyframes gallery-marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.carousel-tile {
+  flex: 0 0 auto;
+  width: 130px;
+  height: 130px;
+  position: relative;
+  border: none;
+  padding: 0;
+  border-radius: 14px;
+  overflow: hidden;
+  cursor: pointer;
+  background: #eee;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+}
+
+.carousel-tile img,
+.carousel-tile video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .gallery-thumb {
@@ -222,5 +263,10 @@
     width: 40px;
     height: 40px;
     font-size: 1.8rem;
+  }
+
+  .carousel-tile {
+    width: 100px;
+    height: 100px;
   }
 }
