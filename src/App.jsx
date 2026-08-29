@@ -1,4 +1,5 @@
 import PhotoUpload from "./components/PhotoUpload";
+import Gallery from "./components/Gallery";
 import "./App.css";
 
 function App() {
@@ -13,6 +14,7 @@ function App() {
       </header>
 
       <PhotoUpload />
+      <Gallery />
 
       <footer className="app-footer">
         <p>With love, Sophie & Kieran 💕</p>

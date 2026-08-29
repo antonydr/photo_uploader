@@ -13,6 +13,27 @@ Standalone site for guests to upload wedding photos/videos to Supabase Storage.
    same Supabase project as the main wedding site, same `wedding-photos` bucket
    and upload policy already set up there).
 
+3. **One extra Supabase step for the gallery to work.** The upload-only policy
+   from the main site lets guests *add* files but not *view* them — the gallery
+   needs read access too. In your Supabase dashboard:
+
+   a) **Storage → `wedding-photos` bucket → bucket settings → toggle "Public bucket" ON.**
+      This lets photo/video URLs be loaded directly in the browser.
+
+   b) **SQL Editor → run:**
+      ```sql
+      create policy "Allow public read of wedding-photos"
+      on storage.objects for select
+      to anon
+      using ( bucket_id = 'wedding-photos' );
+      ```
+      This lets the gallery list and display files. It only grants viewing —
+      guests still can't delete or overwrite anything.
+
+   Since this makes uploaded photos/videos viewable by anyone with the link
+   (necessary for a shared gallery guests can browse), don't upload anything
+   here you wouldn't want visible to all guests.
+
 3. **Set your GitHub repo name in two places** before deploying:
    - `package.json` → `"homepage"` → replace `YOUR-GITHUB-USERNAME` and `YOUR-REPO-NAME`
    - `vite.config.js` → `base:` → replace `YOUR-REPO-NAME`

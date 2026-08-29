@@ -26,9 +26,14 @@ body, html {
 
 /* Force light mode even if the phone/browser prefers dark */
 @media (prefers-color-scheme: dark) {
-  html, body, .app {
+  html, body, .app,
+  .photo-upload-card, .gallery-section, .gallery-modal-inner {
     background: #fdf6f0 !important;
     color: #5a3b42 !important;
+  }
+
+  .photo-upload-card {
+    background: #fff !important;
   }
 
   input:not([type="radio"]),
