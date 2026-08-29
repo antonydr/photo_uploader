@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "homepage": "https://antonydr.github.io/photo_uploader/",
+  "homepage": "https://github.com/antonydr/photo_uploader",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

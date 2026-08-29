@@ -16,21 +16,23 @@
   font-style: italic;
 }
 
-/* Horizontal scrolling preview strip */
-.gallery-strip {
-  display: flex;
+/* Shuffling photo wall — fixed frames, contents fade and swap on their own */
+.gallery-carousel {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
   gap: 10px;
-  overflow-x: auto;
-  padding: 4px 4px 14px;
-  scroll-snap-type: x mandatory;
-  -webkit-overflow-scrolling: touch;
+  margin-bottom: 1.2rem;
 }
 
-.gallery-strip .gallery-thumb {
-  flex: 0 0 auto;
-  width: 110px;
-  height: 110px;
-  scroll-snap-align: start;
+.carousel-slot img,
+.carousel-slot video {
+  transition: opacity 0.45s ease;
+  opacity: 1;
+}
+
+.carousel-slot.fading img,
+.carousel-slot.fading video {
+  opacity: 0;
 }
 
 .gallery-thumb {
@@ -42,6 +44,8 @@
   cursor: pointer;
   background: #eee;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+  aspect-ratio: 1 / 1;
+  width: 100%;
 }
 
 .gallery-thumb img,

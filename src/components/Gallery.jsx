@@ -1,19 +1,27 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import "./Gallery.css";
 import { supabase } from "../lib/supabase";
 
 const BUCKET_NAME = "wedding-photos";
-const PREVIEW_COUNT = 12;
+const POOL_LIMIT = 30;
 const PAGE_SIZE = 24;
+const NUM_SLOTS = 6;
+const MIN_INTERVAL_MS = 2500;
+const MAX_INTERVAL_MS = 5500;
+const FADE_MS = 450;
 
 function isVideo(name, mimetype) {
   if (mimetype) return mimetype.startsWith("video/");
   return /\.(mp4|mov|webm|avi|m4v)$/i.test(name);
 }
 
+function randomInterval() {
+  return MIN_INTERVAL_MS + Math.random() * (MAX_INTERVAL_MS - MIN_INTERVAL_MS);
+}
+
 export default function Gallery() {
-  const [previewFiles, setPreviewFiles] = useState([]);
-  const [loadingPreview, setLoadingPreview] = useState(true);
+  const [pool, setPool] = useState([]);
+  const [loadingPool, setLoadingPool] = useState(true);
   const [error, setError] = useState("");
 
   const [showAll, setShowAll] = useState(false);
@@ -24,6 +32,14 @@ export default function Gallery() {
 
   const [lightboxIndex, setLightboxIndex] = useState(null);
 
+  // Which pool-index each visible slot currently shows, and whether it's mid-fade
+  const [slotItems, setSlotItems] = useState([]);
+  const [slotFading, setSlotFading] = useState([]);
+
+  const timeoutsRef = useRef([]);
+  const pausedRef = useRef(false);
+  const scheduleSlotRef = useRef(() => {});
+
   const toItem = useCallback((f) => {
     const { data } = supabase.storage.from(BUCKET_NAME).getPublicUrl(f.name);
     return {
@@ -33,28 +49,113 @@ export default function Gallery() {
     };
   }, []);
 
-  // Load the small preview strip on first render
+  // Load the pool used for the shuffling wall
   useEffect(() => {
     let cancelled = false;
-    async function loadPreview() {
-      setLoadingPreview(true);
+    async function loadPool() {
+      setLoadingPool(true);
       const { data, error: listError } = await supabase.storage
         .from(BUCKET_NAME)
-        .list("", { limit: PREVIEW_COUNT, sortBy: { column: "created_at", order: "desc" } });
+        .list("", { limit: POOL_LIMIT, sortBy: { column: "created_at", order: "desc" } });
 
       if (cancelled) return;
       if (listError) {
         setError("Couldn't load the gallery right now.");
       } else {
-        setPreviewFiles((data || []).map(toItem));
+        setPool((data || []).map(toItem));
       }
-      setLoadingPreview(false);
+      setLoadingPool(false);
     }
-    loadPreview();
+    loadPool();
     return () => {
       cancelled = true;
     };
   }, [toItem]);
+
+  // Set up the shuffling wall whenever the pool changes
+  useEffect(() => {
+    timeoutsRef.current.forEach((t) => t && clearTimeout(t));
+    timeoutsRef.current = [];
+
+    if (pool.length === 0) {
+      setSlotItems([]);
+      setSlotFading([]);
+      return undefined;
+    }
+
+    const slotCount = Math.min(NUM_SLOTS, pool.length);
+    const initial = Array.from({ length: slotCount }, (_, i) => i % pool.length);
+    setSlotItems(initial);
+    setSlotFading(new Array(slotCount).fill(false));
+    timeoutsRef.current = new Array(slotCount).fill(null);
+
+    // Nothing extra to shuffle in if the pool isn't bigger than what's visible
+    if (pool.length <= slotCount) {
+      scheduleSlotRef.current = () => {};
+      return undefined;
+    }
+
+    const scheduleSlot = (slotIdx) => {
+      if (pausedRef.current) return;
+      const outerTimeout = setTimeout(() => {
+        if (pausedRef.current) return;
+        setSlotFading((prev) => {
+          const next = [...prev];
+          next[slotIdx] = true;
+          return next;
+        });
+
+        setTimeout(() => {
+          if (pausedRef.current) return;
+          setSlotItems((prev) => {
+            const shown = new Set(prev);
+            let candidate = Math.floor(Math.random() * pool.length);
+            let attempts = 0;
+            while (shown.has(candidate) && attempts < 6) {
+              candidate = Math.floor(Math.random() * pool.length);
+              attempts += 1;
+            }
+            const next = [...prev];
+            next[slotIdx] = candidate;
+            return next;
+          });
+          setSlotFading((prev) => {
+            const next = [...prev];
+            next[slotIdx] = false;
+            return next;
+          });
+          scheduleSlot(slotIdx);
+        }, FADE_MS);
+      }, randomInterval());
+
+      timeoutsRef.current[slotIdx] = outerTimeout;
+    };
+
+    scheduleSlotRef.current = scheduleSlot;
+
+    for (let i = 0; i < slotCount; i += 1) {
+      scheduleSlot(i);
+    }
+
+    return () => {
+      timeoutsRef.current.forEach((t) => t && clearTimeout(t));
+      timeoutsRef.current = [];
+    };
+  }, [pool]);
+
+  // Pause the wall while a photo is open full-size, and resume where it left off on close
+  useEffect(() => {
+    pausedRef.current = lightboxIndex !== null;
+
+    if (pausedRef.current) {
+      timeoutsRef.current.forEach((t) => t && clearTimeout(t));
+      timeoutsRef.current = timeoutsRef.current.map(() => null);
+    } else {
+      timeoutsRef.current.forEach((t, i) => {
+        if (!t) scheduleSlotRef.current(i);
+      });
+    }
+  }, [lightboxIndex]);
 
   const loadMore = useCallback(async () => {
     setLoadingAll(true);
@@ -82,7 +183,7 @@ export default function Gallery() {
     setLightboxIndex(null);
   };
 
-  const activeList = showAll ? allFiles : previewFiles;
+  const activeList = showAll ? allFiles : pool;
 
   return (
     <section className="gallery-section">
@@ -90,31 +191,35 @@ export default function Gallery() {
 
       {error && <p className="photo-error">{error}</p>}
 
-      {!loadingPreview && previewFiles.length === 0 && !error && (
+      {!loadingPool && pool.length === 0 && !error && (
         <p className="gallery-empty">No photos uploaded yet — be the first!</p>
       )}
 
-      {previewFiles.length > 0 && (
+      {pool.length > 0 && (
         <>
-          <div className="gallery-strip">
-            {previewFiles.map((item, i) => (
-              <button
-                key={item.name}
-                type="button"
-                className="gallery-thumb"
-                onClick={() => {
-                  setShowAll(false);
-                  setLightboxIndex(i);
-                }}
-              >
-                {item.video ? (
-                  <video src={item.url} muted playsInline preload="metadata" />
-                ) : (
-                  <img src={item.url} alt="" loading="lazy" />
-                )}
-                {item.video && <span className="play-icon">▶</span>}
-              </button>
-            ))}
+          <div className="gallery-carousel">
+            {slotItems.map((poolIdx, slotIdx) => {
+              const item = pool[poolIdx];
+              if (!item) return null;
+              return (
+                <button
+                  key={slotIdx}
+                  type="button"
+                  className={`gallery-thumb carousel-slot${slotFading[slotIdx] ? " fading" : ""}`}
+                  onClick={() => {
+                    setShowAll(false);
+                    setLightboxIndex(poolIdx);
+                  }}
+                >
+                  {item.video ? (
+                    <video src={item.url} muted playsInline preload="metadata" />
+                  ) : (
+                    <img src={item.url} alt="" loading="lazy" />
+                  )}
+                  {item.video && <span className="play-icon">▶</span>}
+                </button>
+              );
+            })}
           </div>
 
           <button type="button" className="view-all-btn" onClick={openGallery}>
