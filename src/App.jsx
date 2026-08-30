@@ -9,7 +9,7 @@ function App() {
         <h1 className="couple-name">Sophie & Kieran</h1>
         <p className="subtitle">
           Thank you for being part of our day! If you snapped any photos or
-          videos, we'd love to see them — upload them below.
+          short videos, we'd love to see them — upload them below.
         </p>
       </header>
 
