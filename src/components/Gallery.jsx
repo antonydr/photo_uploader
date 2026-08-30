@@ -118,7 +118,7 @@ export default function Gallery() {
 
   return (
     <section className="gallery-section">
-      <h2 className="gallery-title">Guest Photos & Videos</h2>
+      <h2 className="gallery-title">Guest Photos & Short Videos</h2>
 
       {error && <p className="photo-error">{error}</p>}
 
